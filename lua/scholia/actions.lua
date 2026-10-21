@@ -122,6 +122,7 @@ function M.open(opts)
   end
   if config.options.close_with_q then
     vim.keymap.set("n", "q", function()
+      M.autosave(nbuf, true)
       window.close()
     end, { buffer = nbuf, nowait = true, desc = "Scholia: close" })
   end
@@ -224,6 +225,36 @@ function M.written(nbuf)
   end
   vim.b[nbuf].scholia = { project = root, file = file, start = s, ["end"] = e, id = id, source = sbuf }
   M.changed()
+end
+
+function M.autosave(nbuf, final)
+  if not config.options.autosave or not vim.api.nvim_buf_is_valid(nbuf) then
+    return
+  end
+  if not vim.b[nbuf].scholia or not vim.bo[nbuf].modified then
+    return
+  end
+  if util.blank(vim.api.nvim_buf_get_lines(nbuf, 0, -1, false)) then
+    if not final then
+      return
+    end
+    if not util.exists(buffer_path(nbuf)) then
+      vim.bo[nbuf].modified = false
+      return
+    end
+  end
+  local ok, err = pcall(vim.api.nvim_buf_call, nbuf, function()
+    vim.cmd "silent update"
+  end)
+  if not ok then
+    util.notify(tostring(err), vim.log.levels.ERROR)
+  end
+end
+
+function M.autosave_all()
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    M.autosave(buf, true)
+  end
 end
 
 function M.abandoned(nbuf, wiped)
@@ -431,32 +462,49 @@ end
 local qf
 local dirty = false
 
-local function quickfix_items(kind, root)
+function M.items(kind, root)
   local items = {}
   for _, n in ipairs(M.collect(root)) do
     if kind ~= "orphans" or M.is_orphan(root, n) then
-      local text = n.text
-      if n.finish > n.start then
-        text = ("[%d–%d] %s"):format(n.start + 1, n.finish + 1, text)
-      end
-      items[#items + 1] = { filename = n.filename, lnum = n.start + 1, col = 1, text = text, user_data = n.id }
+      items[#items + 1] = n
     end
   end
   if kind == "orphans" then
     for _, path in ipairs(store.unindexed(root)) do
       local first = util.first_line(util.readlines(path, 50)) or ""
-      items[#items + 1] = { filename = path, lnum = 1, col = 1, text = "unindexed: " .. first }
+      items[#items + 1] = {
+        filename = path,
+        note = path,
+        start = 0,
+        finish = 0,
+        text = "unindexed: " .. first,
+        unindexed = true,
+      }
     end
   end
   return items
 end
 
-function M.quickfix(kind)
+local function quickfix_items(kind, root)
+  return vim.tbl_map(function(n)
+    local text = n.text
+    if n.finish > n.start then
+      text = ("[%d–%d] %s"):format(n.start + 1, n.finish + 1, text)
+    end
+    return { filename = n.filename, lnum = n.start + 1, col = 1, text = text, user_data = n.id }
+  end, M.items(kind, root))
+end
+
+local function empty(kind)
+  util.notify(kind == "orphans" and "no orphaned notes" or "no notes in this project")
+end
+
+function M.quickfix(kind, root)
   kind = kind or "list"
-  local root = M.current_root()
+  root = root or M.current_root()
   local items = quickfix_items(kind, root)
   if #items == 0 then
-    util.notify(kind == "orphans" and "no orphaned notes" or "no notes in this project")
+    empty(kind)
     return
   end
   vim.fn.setqflist({}, " ", { title = "Scholia " .. kind, items = items })
@@ -479,6 +527,50 @@ function M.refresh_quickfix()
   vim.fn.setqflist({}, "r", { id = qf.id, items = items, idx = math.max(math.min(idx, #items), 1) })
 end
 
+function M.remove_item(root, item)
+  local entry = item.id and store.get(root, item.id)
+  local path
+  if entry then
+    path = store.note_path(root, entry.file, item.id)
+    local s = entry.start or 0
+    if not confirm(("Delete note %s?"):format(title(entry.file, s, entry["end"] or s)), path) then
+      return false
+    end
+  else
+    path = item.note
+    if not store.is_note(path) or not confirm(("Delete %s?"):format(vim.fs.basename(path)), path) then
+      return false
+    end
+  end
+  remove(path, root, entry and item.id, entry and entry.file)
+  render.refresh_all()
+  M.changed()
+  return true
+end
+
+function M.list(kind)
+  kind = kind or "list"
+  local root = M.current_root()
+  local function collect()
+    return M.items(kind, root)
+  end
+  local items = collect()
+  if #items == 0 then
+    empty(kind)
+    return
+  end
+  return require("scholia.picker").open {
+    kind = kind,
+    collect = collect,
+    delete = function(item)
+      return M.remove_item(root, item)
+    end,
+    quickfix = function()
+      M.quickfix(kind, root)
+    end,
+  }
+end
+
 function M.quickfix_delete()
   local list = vim.fn.getqflist { id = 0, items = 0 }
   if not qf or list.id ~= qf.id then
@@ -492,23 +584,10 @@ function M.quickfix_delete()
     return false
   end
   local id = type(item.user_data) == "string" and item.user_data ~= "" and item.user_data or nil
-  local entry = id and store.get(qf.root, id)
-  local path
-  if entry then
-    path = store.note_path(qf.root, entry.file, id)
-    local s = entry.start or 0
-    if not confirm(("Delete note %s?"):format(title(entry.file, s, entry["end"] or s)), path) then
-      return false
-    end
-  else
-    path = util.normalize(vim.api.nvim_buf_get_name(item.bufnr))
-    if not store.is_note(path) or not confirm(("Delete %s?"):format(vim.fs.basename(path)), path) then
-      return false
-    end
-    id = nil
+  local path = util.normalize(vim.api.nvim_buf_get_name(item.bufnr))
+  if not M.remove_item(qf.root, { id = id, note = path }) then
+    return false
   end
-  remove(path, qf.root, id, entry and entry.file)
-  render.refresh_all()
   M.refresh_quickfix()
   local count = #vim.fn.getqflist({ id = qf.id, items = 0 }).items
   if count > 0 then
