@@ -33,11 +33,10 @@ Requires Neovim >= 0.10 on a Unix-like system. No dependencies.
 Call |scholia.setup()| once: >lua
     require("scholia").setup()
 <
-Opening a note always edits the note file:
-
-- save non-empty text to create or update the note;
-- save an empty file to delete it;
-- close without saving to discard it.
+Notes are saved automatically (|scholia-autosave|): when you leave Insert
+mode, change text in Normal mode, leave or close the note, or quit Neovim.
+A new note that stays empty is not created; clear an existing note and close
+it to delete it.
 
 In Visual mode the selected lines become a block note. Selecting exactly the
 range of an existing block opens that note.
@@ -61,12 +60,14 @@ While a new note is being written its range follows edits of the code.
     split     open the note in a split
     delete    delete the note under the cursor (or at the first line of
               [range])
-    list      all notes of the project in the quickfix list
+    list      all notes of the project in a picker |scholia-picker|
     orphans   notes whose anchor was lost, and `.md` files without an index
-              entry, in the quickfix list
+              entry, in a picker
+    quickfix [orphans]
+              the same lists in the quickfix list
 
-    An open list is updated in place when notes are created, changed, moved
-    or deleted.
+    An open quickfix list is updated in place when notes are created,
+    changed, moved or deleted.
 
 ==============================================================================
 4. MAPPINGS                                                 *scholia-mappings*
@@ -76,8 +77,8 @@ While a new note is being written its range follows edits of the code.
   <leader>mf   n, x   open note full screen
   <leader>ms   n, x   open note in a split
   <leader>md   n      delete note
-  <leader>ml   n      all project notes in quickfix
-  dd           n      delete the note under the cursor in that list
+  <leader>ml   n      all project notes in a picker
+  dd           n      delete the note under the cursor in the quickfix list
   <leader>mj   n      next note in the file (wraps, adds to jumplist)
   <leader>mk   n      previous note in the file
 
@@ -88,6 +89,21 @@ popup or full screen note (picker, |:edit|, |:bnext|) goes to the code window
 and the note closes.
 
 Set any key to `false` in |scholia-keymaps| to disable it.
+
+                                                              *scholia-picker*
+The picker has a prompt, the list of notes and a preview of the selected
+note, like Telescope. The prompt filters by location, first line and the
+whole text of a note. It closes when you leave the prompt.
+
+  Key                   Action ~
+  <CR>                  go to the code of the note
+  <C-x> <C-v> <C-t>     go there in a split, vsplit or tab
+  <C-n> <C-p>           next, previous (also <C-j> <C-k>, <Down> <Up>,
+                        `j` `k` in Normal mode)
+  <C-d> <C-u>           scroll the preview
+  <M-d>                 delete the selected note (`dd` in Normal mode)
+  <C-q>                 send the list to quickfix
+  <C-c>                 close (`<Esc>` and `q` in Normal mode)
 
 ==============================================================================
 5. CONFIGURATION                                              *scholia-config*
@@ -106,13 +122,15 @@ Defaults: >lua
       preview_max = 40,
       preview_position = "eol",
       float = { width = 70, max_height = 20, border = "rounded" },
+      picker = { width = 0.8, height = 0.8, preview_width = 0.55, border = "rounded" },
       split = "vertical",
       split_size = nil,
       plain = true,
       filetype = "scholia",
       close_with_q = true,
       start_insert_on_new = true,
-      confirm_delete = true,
+      autosave = true,
+      confirm_delete = false,
       keymaps = {
         open = "<leader>M",
         full = "<leader>mf",
@@ -204,6 +222,18 @@ close_with_q ~
 start_insert_on_new ~
     Start Insert mode when a new note is opened.
 
+                                                            *scholia-autosave*
+autosave ~
+    Save notes on |InsertLeave|, |TextChanged|, |FocusLost|, |BufLeave|,
+    when the note window closes and before quitting. With `false` notes are
+    saved with |:w|: save non-empty text to create or update the note, save
+    an empty file to delete it, close without saving to discard it.
+
+                                                       *scholia-picker-config*
+picker ~
+    `width`, `height`: fractions of the editor. `preview_width`: fraction
+    of the picker; the preview is hidden below 80 columns. `border`.
+
                                                       *scholia-confirm_delete*
 confirm_delete ~
     Ask before deleting a note, with its first line as a preview.
@@ -240,6 +270,11 @@ All groups are defined with `default = true` and restored on |ColorScheme|.
   ScholiaRangeActive   CursorLine      background of the active range
   ScholiaPreview       Comment         preview text
   ScholiaOrphan        DiagnosticWarn  bar of an orphaned note
+  ScholiaPickerSelection Visual        selected line in the picker
+  ScholiaPickerCaret   ScholiaIcon     caret of the selected line
+  ScholiaPickerMatch   Special         matched characters
+  ScholiaPickerPath    Comment         location of a note
+  ScholiaPickerCount   Comment         match count in the prompt
 
 ==============================================================================
 8. LUA API                                                       *scholia-api*
