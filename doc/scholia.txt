@@ -1,0 +1,347 @@
+*scholia.txt*  Personal notes attached to lines and blocks of code
+
+==============================================================================
+CONTENTS                                                    *scholia-contents*
+
+  1. Introduction ..................................... |scholia-introduction|
+  2. Usage ................................................... |scholia-usage|
+  3. Commands ............................................. |scholia-commands|
+  4. Mappings ............................................. |scholia-mappings|
+  5. Configuration .......................................... |scholia-config|
+  6. Columns ............................................... |scholia-columns|
+  7. Highlights ......................................... |scholia-highlights|
+  8. Lua API ................................................... |scholia-api|
+  9. Storage ............................................... |scholia-storage|
+ 10. Health ................................................. |scholia-health|
+
+==============================================================================
+1. INTRODUCTION                                         *scholia-introduction*
+
+scholia.nvim attaches personal notes to lines and blocks of code. Notes
+never end up in git: each note is a plain Markdown file stored outside the
+project, in `stdpath("data")/scholia` by default.
+
+The plugin only knows where the file lives and which lines it belongs to.
+Notes open as plain text with markdown highlighting, without LSP, completion,
+diagnostics, breadcrumbs or line numbers. See |scholia-plain|.
+
+Requires Neovim >= 0.10 on a Unix-like system. No dependencies.
+
+==============================================================================
+2. USAGE                                                       *scholia-usage*
+
+Call |scholia.setup()| once: >lua
+    require("scholia").setup()
+<
+Opening a note always edits the note file:
+
+- save non-empty text to create or update the note;
+- save an empty file to delete it;
+- close without saving to discard it.
+
+In Visual mode the selected lines become a block note. Selecting exactly the
+range of an existing block opens that note.
+
+A note is "under the cursor" when the cursor is inside its range. When ranges
+overlap, the shortest one wins, then the oldest.
+
+While a new note is being written its range follows edits of the code.
+
+==============================================================================
+3. COMMANDS                                                 *scholia-commands*
+
+                                                                    *:Scholia*
+:[range]Scholia [subcommand]
+
+    Without a subcommand, same as `open`. Every subcommand accepts a range,
+    e.g. `:'<,'>Scholia split`.
+
+    open      open the note in a popup
+    full      open the note full screen
+    split     open the note in a split
+    delete    delete the note under the cursor (or at the first line of
+              [range])
+    list      all notes of the project in the quickfix list
+    orphans   notes whose anchor was lost, and `.md` files without an index
+              entry, in the quickfix list
+
+    An open list is updated in place when notes are created, changed, moved
+    or deleted.
+
+==============================================================================
+4. MAPPINGS                                                 *scholia-mappings*
+
+  Key          Mode   Action ~
+  <leader>M    n, x   open note in a popup
+  <leader>mf   n, x   open note full screen
+  <leader>ms   n, x   open note in a split
+  <leader>md   n      delete note
+  <leader>ml   n      all project notes in quickfix
+  dd           n      delete the note under the cursor in that list
+  <leader>mj   n      next note in the file (wraps, adds to jumplist)
+  <leader>mk   n      previous note in the file
+
+In a note window `q` closes it (|scholia-close_with_q|), in a popup `<Esc>`
+closes it too. The popup also closes when you move to a regular window;
+other floats (pickers like Telescope) keep it open. A file opened from a
+popup or full screen note (picker, |:edit|, |:bnext|) goes to the code window
+and the note closes.
+
+Set any key to `false` in |scholia-keymaps| to disable it.
+
+==============================================================================
+5. CONFIGURATION                                              *scholia-config*
+
+                                                             *scholia.setup()*
+Defaults: >lua
+    require("scholia").setup({
+      dir = nil,
+      icon = "",
+      bar = "▎",
+      bar_start = "▖",
+      column = "auto",
+      sign_priority = 5,
+      highlight_active_range = false,
+      preview = false,
+      preview_max = 40,
+      preview_position = "eol",
+      float = { width = 70, max_height = 20, border = "rounded" },
+      split = "vertical",
+      split_size = nil,
+      plain = true,
+      filetype = "scholia",
+      close_with_q = true,
+      start_insert_on_new = true,
+      confirm_delete = true,
+      keymaps = {
+        open = "<leader>M",
+        full = "<leader>mf",
+        split = "<leader>ms",
+        delete = "<leader>md",
+        list = "<leader>ml",
+        list_delete = "dd",
+        next = "<leader>mj",
+        prev = "<leader>mk",
+      },
+    })
+<
+                                                                 *scholia-dir*
+dir ~
+    Storage directory. `nil` means `stdpath("data") .. "/scholia"`.
+
+                                                                 *scholia-bar*
+bar ~
+    Character drawn on every line of a note.
+
+                                                                *scholia-icon*
+icon ~
+    Drawn on the first line of every note (needs a Nerd Font). `false` draws
+    `bar` there too.
+
+                                                           *scholia-bar_start*
+bar_start ~
+    With `icon = false`: drawn on the first line of a block that directly
+    follows another block, so adjacent blocks do not merge into one line.
+
+                                                              *scholia-column*
+column ~
+    Where the bar is drawn: `"sign"`, `"statuscolumn"` or `"auto"`. See
+    |scholia-columns|.
+
+                                                       *scholia-sign_priority*
+sign_priority ~
+    Priority of the signs. The default is below gitsigns.
+
+                                              *scholia-highlight_active_range*
+highlight_active_range ~
+    Highlight the background of the note range under the cursor with
+    `ScholiaRangeActive`.
+
+                                                             *scholia-preview*
+preview ~
+    Show the first line of each note as virtual text next to the code.
+
+preview_max ~
+    Maximum preview width in characters.
+
+preview_position ~
+    `"eol"` or `"right_align"`.
+
+                                                               *scholia-float*
+float ~
+    Popup options. The height follows the content between 5 and
+    `max_height`; the popup opens upwards when there is no room below.
+
+                                                               *scholia-split*
+split ~
+    `"vertical"` or `"horizontal"`.
+
+split_size ~
+    Size of the split, `nil` for an even split.
+
+                                                               *scholia-plain*
+plain ~
+    `true`: a note is only text. The buffer is loaded with 'eventignore' set,
+    so other plugins' autocommands (LSP, breadcrumbs, formatters, indent
+    guides) do not run. It is unlisted, 'buftype' is `acwrite`, the file is
+    written by the plugin without fsync, `b:completion` is `false`, LSP
+    clients are detached and diagnostics are disabled. Note windows get no
+    numbers, signs, statuscolumn, winbar or colorcolumn, and wrap text.
+    Full screen is a floating window over the whole editor, covering tabs and
+    the statusline.
+    `false`: a regular `markdown` buffer, listed, with all integrations.
+
+                                                            *scholia-filetype*
+filetype ~
+    Filetype of note buffers when |scholia-plain| is on. Highlighted with
+    the markdown tree-sitter parser (or `syntax=markdown`).
+
+                                                        *scholia-close_with_q*
+close_with_q ~
+    Map `q` in note windows to close them.
+
+                                                 *scholia-start_insert_on_new*
+start_insert_on_new ~
+    Start Insert mode when a new note is opened.
+
+                                                      *scholia-confirm_delete*
+confirm_delete ~
+    Ask before deleting a note, with its first line as a preview.
+
+                                                             *scholia-keymaps*
+keymaps ~
+    See |scholia-mappings|. Any key can be `false`.
+
+==============================================================================
+6. COLUMNS                                                   *scholia-columns*
+
+Notes get a column of their own, so they never cover gitsigns or
+diagnostics. With `column = "auto"` and an empty 'statuscolumn', scholia
+sets it to fold column, sign column, notes and line numbers once a buffer
+with notes is shown.
+
+If 'statuscolumn' is already set, it is kept. A buffer shown in a window
+without the scholia component gets signs with a priority below gitsigns. Add
+the component to 'statuscolumn' to get the separate column back: >lua
+    vim.o.statuscolumn = "%s%{%v:lua.require'scholia'.statuscolumn()%}%l "
+<
+`column = "sign"` always uses signs, `signcolumn = "auto:2"` (or wider) shows
+them next to gitsigns.
+
+==============================================================================
+7. HIGHLIGHTS                                             *scholia-highlights*
+
+All groups are defined with `default = true` and restored on |ColorScheme|.
+
+  Group                Default ~
+  ScholiaIcon          fg #CE9178      icon on the first line
+  ScholiaBar           ScholiaIcon     bar
+  ScholiaBarActive     ScholiaIcon     bar of the note under cursor
+  ScholiaRangeActive   CursorLine      background of the active range
+  ScholiaPreview       Comment         preview text
+  ScholiaOrphan        DiagnosticWarn  bar of an orphaned note
+
+==============================================================================
+8. LUA API                                                       *scholia-api*
+
+Rows are 0-based. >lua
+    local scholia = require("scholia")
+<
+                                                              *scholia.open()*
+scholia.open({opts})
+    Open the note under the cursor, or a new one. Returns the note id.
+    {opts}:
+      mode   `"float"` (default), `"full"` or `"split"`
+      range  `{ start, finish }` for a block note
+      buf    source buffer, current by default
+
+                                                            *scholia.delete()*
+scholia.delete({opts})
+    Delete the note at `opts.row` (cursor row by default) in `opts.buf`.
+    Returns `true` when a note was deleted.
+
+                                                         *scholia.set_range()*
+scholia.set_range({id}, {start}, {finish})
+    Move a note to a new range in an open buffer. Clears the orphan state.
+
+                                                               *scholia.get()*
+scholia.get({bufnr}, {row})
+    Note at {row} of {bufnr} (0 = current buffer, cursor row by default) or
+    `nil`. Fields:
+      id        ULID of the note
+      file      file path relative to the project root
+      start     first row
+      finish    last row
+      orphan    `true` when the anchor was lost
+      created   creation time (seconds)
+      preview   first line, when |scholia-preview| is on
+      path      path of the `.md` file
+
+                                                              *scholia.list()*
+scholia.list({opts})
+    All notes of the project `opts.project` (the current one by default),
+    sorted by file and row. Fields:
+      id        ULID of the note
+      file      file path relative to the project root
+      filename  absolute path of the source file
+      note      path of the `.md` file
+      start     first row
+      finish    last row
+      text      first non-empty line of the note
+      entry     raw index entry
+
+scholia.next()                                                *scholia.next()*
+scholia.prev()                                                *scholia.prev()*
+    Jump to the next / previous note start in the current buffer.
+
+scholia.statuscolumn()                                *scholia.statuscolumn()*
+    Component for 'statuscolumn', see |scholia-columns|.
+
+                                                                   *b:scholia*
+Note buffers have `b:scholia` with the fields `project`, `file`, `start`,
+`end`, `id` and `source` (source buffer).
+
+==============================================================================
+9. STORAGE                                                   *scholia-storage*
+>
+    ~/.local/share/nvim/scholia/
+    └── %home%me%app/
+        ├── index.json
+        ├── files/
+        │   └── src/components/LoanTable.vue/
+        │       └── 01JAQ7Z8X3K9V2M4T6R8B0C1D2.md
+        └── abs/
+            └── etc/hosts/
+                └── 01JAQ80F5W2N7H1Y9P3S5G6E4A.md
+<
+The project folder is the project root with `/` replaced by `%`. Roots that
+contain `%` themselves are percent-encoded and prefixed with `~`. Notes of
+files inside the project live under `files/`, notes of files outside it under
+`abs/`.
+
+`index.json` keeps only bindings: file, range, anchor lines, author, space,
+timestamps. Each note id is a ULID. `project_id` is the normalized git remote
+URL, or the project path when there is no remote. The index is written
+atomically; a broken index is reported once, copied to `index.json.bak` and
+not overwritten: notes cannot be changed until it is fixed.
+
+Positions are written to the index when the source file or the note is saved,
+and on `:Scholia list`.
+
+When a file changes outside Neovim, notes are re-anchored by the content of
+their first and last lines and the surrounding lines. Notes that cannot be
+found keep their old position and are highlighted as orphans; they stay
+orphans until |scholia.set_range()| moves them.
+
+An index entry whose `.md` file was removed is dropped on the next load. A
+`.md` file without an index entry is kept and shown in `:Scholia orphans`.
+When a project has no notes left its folder is removed.
+
+==============================================================================
+10. HEALTH                                                    *scholia-health*
+
+`:checkhealth scholia` checks the Neovim version, setup, git, the storage
+directory, the index of the current project, overridden mappings and whether
+gitsigns shares the sign column.
+
+ vim:tw=78:ts=8:ft=help:norl:
