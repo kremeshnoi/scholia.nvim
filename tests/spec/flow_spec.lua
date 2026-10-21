@@ -96,13 +96,60 @@ describe("note flow", function()
     assert.is_nil(scholia.get(src, 3))
   end)
 
-  it("creates nothing when closed without saving", function()
+  it("creates nothing when closed without saving and autosave is off", function()
+    require("scholia.config").options.autosave = false
     open_at(3)
     vim.api.nvim_buf_set_lines(0, 0, -1, false, { "draft" })
     vim.cmd "close!"
     assert.are.same({}, notes(root))
     assert.is_false(util.exists(store.project_dir(root)))
     assert.is_nil(scholia.get(src, 3))
+  end)
+
+  it("saves the note automatically when its window closes", function()
+    local id = open_at(3, "float")
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, { "draft" })
+    vim.cmd "close"
+    assert.is_not_nil(notes(root)[id])
+    assert.are.same({ "draft" }, util.readlines(store.note_path(root, "src/main.lua", id)))
+    assert.are.equal(id, scholia.get(src, 3).id)
+  end)
+
+  it("saves the note automatically when leaving insert mode", function()
+    local id = open_at(3)
+    local nbuf = vim.api.nvim_get_current_buf()
+    vim.api.nvim_buf_set_lines(nbuf, 0, -1, false, { "typed" })
+    vim.api.nvim_exec_autocmds("InsertLeave", { buffer = nbuf })
+    assert.is_not_nil(notes(root)[id])
+    assert.is_false(vim.bo[nbuf].modified)
+  end)
+
+  it("saves modified notes before quitting", function()
+    local id = open_at(3)
+    local nbuf = vim.api.nvim_get_current_buf()
+    vim.api.nvim_buf_set_lines(nbuf, 0, -1, false, { "before quit" })
+    vim.api.nvim_exec_autocmds("ExitPre", {})
+    assert.is_not_nil(notes(root)[id])
+    assert.is_false(vim.bo[nbuf].modified)
+  end)
+
+  it("does not create an empty note and deletes a cleared one on close", function()
+    local id = open_at(3)
+    local nbuf = vim.api.nvim_get_current_buf()
+    vim.api.nvim_buf_set_lines(nbuf, 0, -1, false, { "  " })
+    vim.api.nvim_exec_autocmds("InsertLeave", { buffer = nbuf })
+    vim.cmd "close"
+    assert.are.same({}, notes(root))
+    vim.wait(50)
+    assert.is_nil(state.pending[id])
+    id = open_at(5)
+    h.write_note { "keep" }
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, { "" })
+    vim.api.nvim_exec_autocmds("TextChanged", { buffer = 0 })
+    assert.is_not_nil(notes(root)[id])
+    vim.cmd "close"
+    assert.is_nil(notes(root)[id])
+    assert.is_nil(scholia.get(src, 5))
   end)
 
   it("forgets an untouched new note when its window closes", function()
@@ -214,7 +261,7 @@ describe("note flow", function()
     assert.are.equal(2, #list)
     assert.are.equal("first", list[1].text)
     assert.are.equal("second", list[2].text)
-    vim.cmd "Scholia list"
+    vim.cmd "Scholia quickfix"
     local qf = vim.fn.getqflist()
     assert.are.equal(2, #qf)
     assert.are.equal("[11–13] second", qf[2].text)
@@ -289,7 +336,7 @@ describe("note flow", function()
     open_at(10)
     h.write_note { "second" }
     vim.cmd "close"
-    vim.cmd "Scholia list"
+    vim.cmd "Scholia quickfix"
     assert.are.equal(2, #vim.fn.getqflist())
     vim.cmd "wincmd p"
     vim.api.nvim_win_set_cursor(0, { 5, 0 })
@@ -343,7 +390,7 @@ describe("note flow", function()
     open_at(4)
     h.write_note { "first" }
     vim.cmd "close"
-    vim.cmd "Scholia list"
+    vim.cmd "Scholia quickfix"
     vim.cmd "cclose"
     local collect = require("scholia.actions").collect
     local calls = 0
@@ -375,7 +422,7 @@ describe("note flow", function()
     h.write_note { "first" }
     vim.cmd "close"
     vim.api.nvim_buf_set_lines(src, 0, 0, false, { "a", "b" })
-    vim.cmd "Scholia list"
+    vim.cmd "Scholia quickfix"
     assert.are.equal(7, vim.fn.getqflist()[1].lnum)
     assert.are.equal(4, notes(root)[id].start)
     vim.cmd "cclose"
@@ -437,7 +484,7 @@ describe("note flow", function()
     local third = open_at(20)
     h.write_note { "third" }
     vim.cmd "close"
-    vim.cmd "Scholia list"
+    vim.cmd "Scholia quickfix"
     assert.are.equal("qf", vim.bo.filetype)
     vim.api.nvim_win_set_cursor(0, { 2, 0 })
     vim.cmd "normal dd"
@@ -558,7 +605,7 @@ describe("note flow", function()
     open_at(4)
     h.write_note { "first" }
     vim.cmd "close"
-    vim.cmd "Scholia list"
+    vim.cmd "Scholia quickfix"
     local fed
     local feedkeys = vim.api.nvim_feedkeys
     vim.api.nvim_feedkeys = function(keys)
@@ -648,6 +695,96 @@ describe("note flow", function()
     render.refresh(src)
     assert.are.equal(0, count(vim.api.nvim_buf_get_extmarks(src, render.ns, 0, -1, {})))
     vim.cmd "close"
+  end)
+
+  local function picker_with_notes()
+    open_at(4)
+    h.write_note { "first", "body of the first" }
+    vim.cmd "close"
+    open_at(0, "split", { 10, 12 })
+    h.write_note { "second", "searchable detail" }
+    vim.cmd "close"
+    vim.cmd "Scholia list"
+    return require "scholia.picker"
+  end
+
+  local function results(p)
+    return vim.api.nvim_buf_get_lines(p.results.buf, 0, -1, false)
+  end
+
+  local function type_query(p, text)
+    vim.api.nvim_buf_set_lines(p.prompt.buf, 0, -1, false, { p.prefix .. text })
+    vim.api.nvim_exec_autocmds("TextChangedI", { buffer = p.prompt.buf })
+  end
+
+  it("lists project notes in a picker with a preview", function()
+    local picker = picker_with_notes()
+    local p = picker.state()
+    assert.are.equal(p.prompt.win, vim.api.nvim_get_current_win())
+    assert.are.equal("prompt", vim.bo[p.prompt.buf].buftype)
+    local lines = results(p)
+    assert.are.equal(2, #lines)
+    assert.is_truthy(lines[1]:find("src/main.lua:5  first", 1, true))
+    assert.is_truthy(lines[2]:find("src/main.lua:11–13  second", 1, true))
+    assert.are.same({ "first", "body of the first" }, vim.api.nvim_buf_get_lines(p.preview.buf, 0, -1, false))
+    picker.move(1)
+    assert.are.same({ "second", "searchable detail" }, vim.api.nvim_buf_get_lines(p.preview.buf, 0, -1, false))
+    picker.close()
+    assert.is_nil(picker.state())
+    assert.is_false(vim.api.nvim_win_is_valid(p.prompt.win))
+    assert.is_false(vim.api.nvim_win_is_valid(p.preview.win))
+  end)
+
+  it("filters the picker by note text and body", function()
+    local picker = picker_with_notes()
+    local p = picker.state()
+    type_query(p, "detail")
+    assert.are.equal(1, #results(p))
+    assert.is_truthy(results(p)[1]:find("second", 1, true))
+    type_query(p, "")
+    assert.are.equal(2, #results(p))
+    picker.close()
+  end)
+
+  it("jumps to the code of the selected note", function()
+    local origin = vim.api.nvim_get_current_win()
+    local picker = picker_with_notes()
+    picker.move(1)
+    picker.select()
+    assert.is_nil(picker.state())
+    assert.are.equal(origin, vim.api.nvim_get_current_win())
+    assert.are.equal(src, vim.api.nvim_get_current_buf())
+    assert.are.equal(11, vim.api.nvim_win_get_cursor(0)[1])
+  end)
+
+  it("deletes the selected note from the picker without asking", function()
+    local picker = picker_with_notes()
+    local p = picker.state()
+    local id = p.shown[1].id
+    picker.delete()
+    assert.is_nil(notes(root)[id])
+    assert.are.equal(1, #results(p))
+    assert.is_truthy(results(p)[1]:find("second", 1, true))
+    picker.close()
+  end)
+
+  it("sends the picker list to quickfix", function()
+    local picker = picker_with_notes()
+    picker.quickfix()
+    assert.is_nil(picker.state())
+    assert.are.equal(2, #vim.fn.getqflist())
+    vim.cmd "cclose"
+  end)
+
+  it("closes the picker when focus leaves it", function()
+    local origin = vim.api.nvim_get_current_win()
+    local picker = picker_with_notes()
+    vim.api.nvim_set_current_win(origin)
+    vim.wait(100, function()
+      return picker.state() == nil
+    end)
+    assert.is_nil(picker.state())
+    assert.are.equal(origin, vim.api.nvim_get_current_win())
   end)
 
   it("refuses to work inside a note", function()
