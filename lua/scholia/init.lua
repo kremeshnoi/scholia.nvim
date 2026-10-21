@@ -8,7 +8,7 @@ local util = require "scholia.util"
 local M = {}
 
 local modes = { open = "float", full = "full", split = "split" }
-local subcommands = { "open", "full", "split", "delete", "list", "orphans" }
+local subcommands = { "open", "full", "split", "delete", "list", "orphans", "quickfix" }
 
 local function selection()
   local a, b = vim.fn.line "v", vim.fn.line "."
@@ -30,8 +30,8 @@ end
 
 local function autocmds()
   local group = vim.api.nvim_create_augroup("scholia", { clear = true })
-  local function au(events, callback)
-    vim.api.nvim_create_autocmd(events, { group = group, callback = callback })
+  local function au(events, callback, nested)
+    vim.api.nvim_create_autocmd(events, { group = group, callback = callback, nested = nested })
   end
   au({ "BufReadPost", "BufNewFile", "BufFilePost" }, function(a)
     attach(a.buf)
@@ -49,6 +49,17 @@ local function autocmds()
       actions.changed()
     end
   end)
+  au({ "InsertLeave", "TextChanged", "FocusLost" }, function(a)
+    if vim.b[a.buf].scholia then
+      actions.autosave(a.buf, false)
+    end
+  end, true)
+  au("BufLeave", function(a)
+    if vim.b[a.buf].scholia then
+      actions.autosave(a.buf, true)
+    end
+  end, true)
+  au({ "QuitPre", "ExitPre" }, actions.autosave_all, true)
   au("BufHidden", function(a)
     if is_note(a.buf) then
       actions.abandoned(a.buf, false)
@@ -119,18 +130,23 @@ local function command()
     elseif sub == "delete" then
       actions.delete { row = range and range[1] }
     elseif sub == "list" or sub == "orphans" then
-      actions.quickfix(sub)
+      actions.list(sub)
+    elseif sub == "quickfix" then
+      actions.quickfix(c.fargs[2] == "orphans" and "orphans" or "list")
     else
       util.notify("unknown subcommand " .. sub, vim.log.levels.ERROR)
     end
   end, {
-    nargs = "?",
+    nargs = "*",
     range = true,
     desc = "Scholia notes",
-    complete = function(lead)
+    complete = function(lead, line)
+      local args = vim.split(line, "%s+", { trimempty = true })
+      local n = #args - (lead ~= "" and 1 or 0)
+      local options = n <= 1 and subcommands or (n == 2 and args[2] == "quickfix" and { "orphans" } or {})
       return vim.tbl_filter(function(s)
         return s:sub(1, #lead) == lead
-      end, subcommands)
+      end, options)
     end,
   })
 end
@@ -154,7 +170,7 @@ local function keymaps()
     actions.delete()
   end, "delete note")
   map("n", keys.list, function()
-    actions.quickfix "list"
+    actions.list "list"
   end, "list project notes")
   map("n", keys.next, actions.next, "next note")
   map("n", keys.prev, actions.prev, "previous note")
