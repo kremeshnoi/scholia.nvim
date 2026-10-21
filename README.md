@@ -47,12 +47,28 @@ No dependencies. Full documentation: `:h scholia`.
 | `<leader>mf`                | n, x | open note full screen                 |
 | `<leader>ms`                | n, x | open note in a split                  |
 | `<leader>md`                | n    | delete note                           |
-| `<leader>ml`                | n    | all project notes in quickfix         |
-| `dd`                        | n    | delete the note in that quickfix list |
+| `<leader>ml`                | n    | all project notes in a picker         |
+| `dd`                        | n    | delete the note in the quickfix list  |
 | `<leader>mj` / `<leader>mk` | n    | next / previous note in the file      |
 
-Opening always edits the note file. Save non-empty text to create or update the
-note, save an empty file to delete it, close without saving to discard it.
+Notes save themselves: when you leave Insert mode, change text in Normal mode,
+leave or close the note, or quit Neovim. Nothing asks you to save. A new note
+that stays empty is not created; clear an existing note and close it to delete
+it. Set `autosave = false` to save with `:w` yourself.
+
+`<leader>ml` opens a picker in the style of Telescope: a prompt, the list of
+notes and a preview of the selected note. The prompt filters by location, first
+line and the whole text of a note.
+
+| Key                         | Action                                  |
+| --------------------------- | --------------------------------------- |
+| `<CR>`                      | go to the code of the note              |
+| `<C-x>` / `<C-v>` / `<C-t>` | go there in a split / vsplit / tab      |
+| `<C-n>` / `<C-p>`           | next / previous (also `<C-j>`, `<C-k>`) |
+| `<C-d>` / `<C-u>`           | scroll the preview                      |
+| `<M-d>`, `dd` in Normal     | delete the selected note                |
+| `<C-q>`                     | send the list to quickfix               |
+| `<C-c>`, `<Esc>` in Normal  | close                                   |
 
 In visual mode the selected lines become a block note. Selecting exactly the
 range of an existing block opens that note.
@@ -61,8 +77,9 @@ The popup closes when you move to a regular window; pickers like Telescope
 keep it open. A file opened from a popup or full screen note (picker, `:edit`,
 `:bnext`) goes to the code window and the note closes.
 
-`:Scholia [open|full|split|delete|list|orphans]` accepts a range, e.g.
-`:'<,'>Scholia split`.
+`:Scholia [open|full|split|delete|list|orphans|quickfix]` accepts a range,
+e.g. `:'<,'>Scholia split`. `list` and `orphans` open the picker,
+`quickfix [orphans]` fills the quickfix list.
 
 ## Configuration
 
@@ -79,13 +96,15 @@ require("scholia").setup({
   preview_max = 40,
   preview_position = "eol",
   float = { width = 70, max_height = 20, border = "rounded" },
+  picker = { width = 0.8, height = 0.8, preview_width = 0.55, border = "rounded" },
   split = "vertical",
   split_size = nil,
   plain = true,
   filetype = "scholia",
   close_with_q = true,
   start_insert_on_new = true,
-  confirm_delete = true,
+  autosave = true,
+  confirm_delete = false,
   keymaps = {
     open = "<leader>M",
     full = "<leader>mf",
@@ -112,10 +131,16 @@ note, `bar` the rest of a block. With `icon = false` the first line of a block
 that directly follows another one gets `bar_start`, so adjacent blocks do not
 merge into one line.
 
-An open `:Scholia list` / `orphans` quickfix list is updated in place when
-notes are created, changed, moved or deleted. A hidden list is refreshed when
-it is shown again. `dd` in it deletes the note under the cursor (with
-`confirm_delete`); in other quickfix lists `dd` works as usual.
+`picker.width` and `picker.height` are fractions of the editor,
+`preview_width` a fraction of the picker. The preview is hidden when the
+picker is narrower than 80 columns.
+
+Notes are deleted without a question; `confirm_delete = true` asks first.
+
+An open `:Scholia quickfix` list is updated in place when notes are created,
+changed, moved or deleted. A hidden list is refreshed when it is shown again.
+`dd` in it deletes the note under the cursor; in other quickfix lists `dd`
+works as usual.
 
 ### Sign column vs statuscolumn
 
@@ -136,14 +161,19 @@ them next to gitsigns.
 
 ### Highlights
 
-| Group                | Default          |
-| -------------------- | ---------------- |
-| `ScholiaIcon`        | `fg = #CE9178`   |
-| `ScholiaBar`         | `ScholiaIcon`    |
-| `ScholiaBarActive`   | `ScholiaIcon`    |
-| `ScholiaRangeActive` | `CursorLine`     |
-| `ScholiaPreview`     | `Comment`        |
-| `ScholiaOrphan`      | `DiagnosticWarn` |
+| Group                    | Default          |
+| ------------------------ | ---------------- |
+| `ScholiaIcon`            | `fg = #CE9178`   |
+| `ScholiaBar`             | `ScholiaIcon`    |
+| `ScholiaBarActive`       | `ScholiaIcon`    |
+| `ScholiaRangeActive`     | `CursorLine`     |
+| `ScholiaPreview`         | `Comment`        |
+| `ScholiaOrphan`          | `DiagnosticWarn` |
+| `ScholiaPickerSelection` | `Visual`         |
+| `ScholiaPickerCaret`     | `ScholiaIcon`    |
+| `ScholiaPickerMatch`     | `Special`        |
+| `ScholiaPickerPath`      | `Comment`        |
+| `ScholiaPickerCount`     | `Comment`        |
 
 ## Lua API
 
