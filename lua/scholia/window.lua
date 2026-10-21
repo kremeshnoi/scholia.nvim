@@ -21,6 +21,7 @@ function M.close(win)
   if not vim.api.nvim_win_is_valid(win) then
     return
   end
+  require("scholia.actions").autosave(vim.api.nvim_win_get_buf(win), true)
   local ok, err = pcall(vim.api.nvim_win_close, win, false)
   if not ok then
     util.notify(tostring(err), vim.log.levels.WARN)
