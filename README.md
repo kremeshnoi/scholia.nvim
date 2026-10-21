@@ -1,6 +1,21 @@
 # scholia.nvim
 
-Personal notes attached to lines and blocks of code that never end up in git.
+Notes in the margins of your code that never end up in git.
+
+## Why
+
+Comments in code are rarely what you need. Good code explains itself through
+names and structure, and a comment that retells the code goes stale the moment
+the code changes. Everyone then reads it in every diff and every review.
+
+Notes are a different thing, and you need them all the time: why you went this
+way, what you tried and dropped, what to check next time, a question for a
+colleague, a reminder only you care about. They belong to you, not to the
+repository. scholia keeps them next to the lines they are about without
+touching the files.
+
+Scholia are the notes ancient scholars wrote in the margins of classical texts
+to explain them to the next reader.
 
 A note is a plain Markdown file stored outside the project
 (`stdpath("data")/scholia` by default). The plugin only knows where the file
@@ -181,6 +196,13 @@ copied to `index.json.bak`, and notes cannot be changed until it is fixed.
 
 Only anchor lines of source code are stored next to the notes.
 
+## Roadmap
+
+Today every note lives on your machine in a single personal space. Next up are
+spaces you can switch between: a personal space on your own self-hosted
+server, and shared spaces for a team or a company, also self-hosted. See
+[ROADMAP.md](ROADMAP.md).
+
 ## Health
 
 `:checkhealth scholia` checks the Neovim version, setup, git, the storage
@@ -195,6 +217,8 @@ make test NVIM=/path/to/nvim-0.10/bin/nvim
 make lint
 make format
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 Tests use plenary.nvim (`PLENARY_DIR`, the lazy.nvim install, or a clone into
 `.tests/`) and ignore the user config and `site` directory. Lint needs
