@@ -159,7 +159,7 @@ describe("store", function()
     assert.is_true(store.put(root, "N1", entry "src/a.lua"))
     local before = vim.fn.readfile(store.index_path(root))
     local open, notify = io.open, vim.notify
-    io.open = function(path, mode)
+    rawset(io, "open", function(path, mode)
       if path:find(".tmp.", 1, true) then
         local fd = open(path, mode)
         return {
@@ -172,10 +172,11 @@ describe("store", function()
         }
       end
       return open(path, mode)
-    end
+    end)
     vim.notify = function() end
     local ok, res = pcall(store.put, root, "N2", entry "src/a.lua")
-    io.open, vim.notify = open, notify
+    rawset(io, "open", open)
+    vim.notify = notify
     assert.is_true(ok, res)
     assert.is_false(res)
     assert.are.same(before, vim.fn.readfile(store.index_path(root)))
