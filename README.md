@@ -2,6 +2,8 @@
 
 Notes in the margins of your code that never end up in git.
 
+<img width="500" height="500" alt="image_a7a0a407" src="https://github.com/user-attachments/assets/4ec05e73-d164-4575-a91d-169ffd48efb3" />
+
 ## Why
 
 Comments in code are rarely what you need. Good code explains itself through
