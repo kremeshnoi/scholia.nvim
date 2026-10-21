@@ -17,6 +17,11 @@ function M.highlights()
     ScholiaRangeActive = "CursorLine",
     ScholiaPreview = "Comment",
     ScholiaOrphan = "DiagnosticWarn",
+    ScholiaPickerSelection = "Visual",
+    ScholiaPickerCaret = "ScholiaIcon",
+    ScholiaPickerMatch = "Special",
+    ScholiaPickerPath = "Comment",
+    ScholiaPickerCount = "Comment",
   }
   for name, link in pairs(links) do
     vim.api.nvim_set_hl(0, name, { link = link, default = true })
