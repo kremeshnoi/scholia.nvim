@@ -2,7 +2,9 @@
 
 *Your thoughts live in the margins; your code stays clean.*
 
-<img width="500" height="500" alt="image_a7a0a407" src="https://github.com/user-attachments/assets/4ec05e73-d164-4575-a91d-169ffd48efb3" />
+## Showcase
+
+https://github.com/user-attachments/assets/4bc88dea-baa2-4349-b3a8-5e9c63b15fb2
 
 Comments in code are rarely what you need. Good code explains itself through
 names and structure, and a comment that retells the code goes stale the moment
@@ -16,6 +18,8 @@ touching the files.
 
 Scholia are the notes ancient scholars wrote in the margins of classical texts
 to explain them to the next reader.
+
+<img width="500" height="500" alt="image_a7a0a407" src="https://github.com/user-attachments/assets/4ec05e73-d164-4575-a91d-169ffd48efb3" />
 
 A note is a plain Markdown file stored outside the project
 (`stdpath("data")/scholia` by default). The plugin only knows where the file
